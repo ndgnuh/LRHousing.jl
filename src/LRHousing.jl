@@ -7,6 +7,10 @@ using DataFrames
 using CSV
 using GLM
 using Setfield # lens
+using HypothesisTests
+using Distributions
+include("cor.jl")
+include("transformation.jl")
 
 
 """
