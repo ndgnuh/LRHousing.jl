@@ -1,7 +1,7 @@
 name = "LRHousing"
 uuid = "68f5d1af-ad62-4b09-967d-1ca4240418bf"
 authors = ["ndgnuh <ndgnuh@protonmail.com>"]
-version = "0.2.0"
+version = "0.4.0"
 
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
@@ -14,6 +14,7 @@ Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 FixedPointNumbers = "53c48c17-4a7d-5ca2-90c5-79b7896eea93"
 GLM = "38e38edf-8417-5370-95a0-9cbb8c7f171a"
 HypothesisTests = "09f84164-cd44-5f33-b23f-e6b0d136a0d5"
+PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 Setfield = "efcf1570-3423-57d1-acb7-fd33fddbac46"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
