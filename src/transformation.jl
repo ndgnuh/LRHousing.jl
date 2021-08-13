@@ -1,53 +1,170 @@
-"""
-	boxcox(x, λ₁, λ₂ = 0)
+abstract type Transformation end
 
-Return the boxcox transformed `x`.
-"""
-function boxcox(x, λ1, λ2 = 0)
-	if λ1 == 0
-		log(x + λ2)
-	else
-		((x + λ2)^λ1 - 1) / λ1
+
+struct FillMissing <: Transformation
+	column
+	stat
+	function FillMissing(column, f = mean)
+		new(column, f)
 	end
 end
 
-function inv_boxcox(x, λ1, λ2 = 0)
-	y = if λ1 == 0
-		exp(x)
-	else
-		(x * λ1 + 1)^(1/λ1)
-	end
-	y - λ2
+
+struct Log1p <: Transformation
+	column
 end
 
-"""
-	auto_boxcox(X, λ₂ = 0; r = -5:0.01:5)
 
-Return tuple `(λ₁, λ₂, Y, pv)` where:
-- `λ₁`, `λ₂` are boxcox λ-s value
-- `Y` are boxcox transformed values of `X`
-- `pv` is `pvalue` of the `OneSampleADTest`
+struct ZNormal <: Transformation
+	column
+end
 
-Lambda values are automatically calculated using grid search by finding the max of the `pvalue` of `OneSampleADTest`. One can pass a range to `λ₂` to grid search for `λ₂`, too.
-"""
-function auto_boxcox(X, λ2 = 0; r = -5:0.01:5)
-	iter = Iterators.product(r, λ2)
-	dist = Normal(0, 1)
 
-	grid = map(iter) do (l1, l2)
-		Y = boxcox.(X, l1, l2)
-		@chain begin
-			Y
-			standardize(ZScoreTransform, _)
-			OneSampleADTest(_, dist)
-			pvalue(_)
-			(l1 = l1, l2 = l2, Y = Y, pv = _)
+struct Categorize <: Transformation
+	column
+	items
+end
+
+
+struct HierarchyCoding <: Transformation
+	column
+	items
+end
+
+
+function derive(df, f::HierarchyCoding)
+	function g(x)
+		y = indexin(x, f.items)
+		y = replace(y, nothing => 0)
+		safe_znormal(y)
+	end
+	transform(df, f.column => g => f.column)
+end
+
+
+function derive(df, f::FillMissing)
+	function g(x)
+		stat_x = f.stat(collect(skipmissing(x)))
+		replace(x, missing => stat_x)
+	end
+	transform(df, f.column => g => f.column)
+end
+
+
+function derive(df, f::Categorize)
+	new_columns = target_columns(f)
+	t = map(zip(f.items, new_columns)) do (item, name)
+		f.column => ByRow(isequal(item)) => name
+	end
+	df = select(transform(df, t...), Not(f.column))
+	t = map(new_columns) do name
+		name => safe_znormal => name
+	end
+	transform(df, t...)
+end
+
+
+function derive(df, f::Log1p)
+	transform(df, f.column => ByRow(log1p) => f.column)
+end
+
+
+function derive(df, fs_::Vector{Transformation})
+	fs = let names = names(df)
+		filter(x -> x.column in names, fs_)
+	end
+	let nfs = setdiff(fs_, fs)
+		if !isempty(nfs)
+			@warn nfs
 		end
 	end
-	@chain begin
-		grid
-		filter(x -> !isnan(x.pv), _)
-		sort(_, by = x -> x.pv, rev=true)
-		first(_)
+	for f in fs
+		df = derive(df, f)
+	end
+	return df
+end
+
+
+function safe_znormal(x)
+	mx = mean(x)
+	sx = std(x; mean=mx)
+	y = (x .- mx)
+	if isnan(sx) || isapprox(sx, 0)
+		norm = sum(@. y^2)
+		if isapprox(norm, 0)
+			y
+		else
+			y / norm
+		end
+	else
+		y / sx
 	end
 end
+
+
+function derive(df, f::ZNormal)
+	transform(df, f.column => safe_znormal => f.column)
+end
+
+
+inv_function(f::Transformation) = nothing
+inv_function(f::Log1p) = ByRow(expm1)
+
+
+function inv_derive(df, f::Transformation)
+	g = inv_function(f)
+	if isnothing(g)
+		df
+	else
+		transform(df, f.column => g => f.column)
+	end
+end
+
+
+function inv_derive(df, fs::Vector{Transformation})
+	fs = let names = names(df)
+		filter(x -> x.column in names, fs)
+	end
+	for f in fs
+		df = inv_derive(df, f)
+	end
+	return df
+end
+
+
+function pp(df, preset)
+	t1 = mapreduce(vcat, preset.numeric_wo_target) do name
+		col = df[!, name]
+		fm = FillMissing(name)
+		if skewness(col |> skipmissing |> collect) ≥ 0.7
+			[FillMissing(name), Log1p(name), ZNormal(name)]
+		else
+			[FillMissing(name), ZNormal(name)]
+		end
+	end
+
+	t2 = map(preset.hierarchical |> collect) do (n, v)
+		HierarchyCoding(n, v)
+	end
+
+	t3 = map(preset.categorical) do n
+		vals = unique(df[!, n])
+		Categorize(n, vals)
+	end
+
+	t4 = let t =  Log1p[]
+		col = df[!, preset.target]
+		while skewness(col) ≥ 0.7 && length(t) ≤ 2
+			push!(t, Log1p(preset.target))
+			col = log1p.(col)
+		end
+		t
+	end
+
+	t1 ∪ t2 ∪ t3 ∪ t4
+end
+
+
+target_columns(f::Transformation) = [f.column]
+target_columns(f::Categorize) = [f.column * "_" * string(item) for item in f.items]
+target_columns(fs::Vector{Transformation}) = unique(reduce(vcat, target_columns.(fs)))

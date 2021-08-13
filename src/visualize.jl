@@ -7,8 +7,8 @@ const DEF_WIDTH=Compose.default_graphic_width
 const DEF_HEIGHT=Compose.default_graphic_height
 
 
-function qqplot(X; transpose=false)
-	set_default_plot_size(DEF_WIDTH, DEF_HEIGHT)
+function qqplot(X; transpose=false, w=DEF_WIDTH, h=DEF_WIDTH)
+	set_default_plot_size(w, h)
 
 	d = Normal(0, 1)
 	n = length(X)
@@ -33,10 +33,15 @@ function qqplot(X; transpose=false)
 end
 
 
-function coefplot(df; bar_height = 0.75cm)
+function coefplot(df; bar_height = 0.75cm, intercept=false)
 	codf = @chain begin
 		df
 		filter(r ->  !(r["Lower 95%"] ≤ 0 ≤ r["Upper 95%"]), _)
+		if intercept
+			_
+		else
+			filter(r->r["Name"] != "(Intercept)", _)
+		end
 		transform(_, "Coef." => ByRow(abs) => "AbsCoef")
 		sort(_, "AbsCoef", rev=false)
 	end

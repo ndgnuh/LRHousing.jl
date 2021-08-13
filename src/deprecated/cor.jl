@@ -1,5 +1,6 @@
 using CategoricalArrays
 
+
 function crammerv(x::CategoricalArray, y::CategoricalArray)
 	@assert length(x) == length(y)
 	lx = levelcode.(x)
@@ -22,12 +23,14 @@ end
 crammerv(x::CategoricalArray, y) = crammerv(x, bin_number_vector(y, 10))
 crammerv(x, y::CategoricalArray) = crammerv(bin_number_vector(x, 10), y)
 
+
 function bin_number_vector(X, k=10)
 	minx = minimum(X)
 	maxx = maximum(X)
 	bins = range(start=minx, stop=maxx, length=k)
 	map(x -> findfirst(x .< bins), X)
 end
+
 
 function compute_cordf(df)
 	result = DataFrame(col=names(df))
@@ -46,6 +49,7 @@ function compute_cordf(df)
 	transformations
 	transform(result, transformations...)
 end
+
 
 function find_multicolinearity(cordf, ycol; threshold=0.8)
 	to_be_removed = String[]
