@@ -60,6 +60,46 @@ function fit(data, columns, target)
 end
 
 
-export DataPipeline, create_formula, lm, create_linear_model
+function rmse(pred, y; normalize=true)
+	n = length(y)
+	r = sqrt(mean(@. (pred - y)^2) / n)
+	if normalize
+		#= maxy = max(pred..., y...) =#
+		#= miny = min(pred..., y...) =#
+		#= r / (maxy - miny) =#
+		r / iqr(y)
+	else
+		r
+	end
+end
+
+
+function kfold_rmse(data, preset, k = 10; normalize=true)
+	n = size(data, 1)
+	idx = collect(Iterators.partition(1:n, n÷k))
+	tf = pp(data, preset)
+	columns = target_columns(tf)
+	f = formula(columns, preset.target)    
+
+	R = map(enumerate(idx)) do (k, idx)
+		train = derive(data[Not(idx), :], tf)
+		test = derive(data[idx, :], tf)
+		model = lm(f, train)
+		pred = predict(model, test)
+		rmse(pred, test[!, preset.target]; normalize=normalize)
+	end
+	mean(R)
+end
+
+
+function rsquared(model, y)
+	my = mean(y)
+	stot = sum(@. (y - my)^2)
+	sres = sum(residuals(model).^2)
+	1 - sres/stot
+end
+
+
+export lm
 
 end # module

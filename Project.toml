@@ -1,7 +1,7 @@
 name = "LRHousing"
 uuid = "68f5d1af-ad62-4b09-967d-1ca4240418bf"
 authors = ["ndgnuh <ndgnuh@protonmail.com>"]
-version = "1.0.0"
+version = "1.1.0"
 
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
