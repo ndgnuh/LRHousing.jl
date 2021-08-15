@@ -10,6 +10,14 @@ struct FillMissing <: Transformation
 end
 
 
+struct MinMaxNormalize <: Transformation
+	column
+	min
+	r
+	MinMaxNormalize(column, X) = new(column, minimum(X), maximum(X) - minimum(X))
+end
+
+
 struct Log1p <: Transformation
 	column
 end
@@ -17,6 +25,18 @@ end
 
 struct ZNormal <: Transformation
 	column
+end
+
+
+struct ZNormalize <: Transformation
+	column
+	μ
+	σ
+	function ZNormalize(column, X)
+		sx = std(X)
+		ex = mean(X)
+		new(column, ex, sx)
+	end
 end
 
 
@@ -29,6 +49,11 @@ end
 struct HierarchyCoding <: Transformation
 	column
 	items
+end
+
+
+function derive(df, f::MinMaxNormalize)
+	transform(df, f.column => ByRow(x -> (x - f.min) / f.r) => f.column)
 end
 
 
@@ -93,12 +118,19 @@ function safe_znormal(x)
 end
 
 
+function derive(df, f::ZNormalize)
+	transform(df, f.column => ByRow(x -> (x - f.μ) / f.σ) => f.column)
+end
+
+
 function derive(df, f::ZNormal)
 	transform(df, f.column => safe_znormal => f.column)
 end
 
 
 inv_function(f::Transformation) = nothing
+inv_function(f::ZNormalize) = ByRow(x -> x * f.σ + f.μ)
+inv_function(f::MinMaxNormalize) = ByRow(x -> x * f.r + f.min)
 inv_function(f::Log1p) = ByRow(expm1)
 
 
@@ -113,49 +145,47 @@ end
 
 
 function inv_derive(df, fs::Vector{Transformation})
-	fs = let names = names(df)
-		filter(x -> x.column in names, fs)
-	end
-	for f in fs
-		df = inv_derive(df, f)
+	for f in reverse(fs)
+		if f.column in names(df)
+			df = inv_derive(df, f)
+		end
 	end
 	return df
 end
 
 
-function pp(df, preset)
-	t1 = mapreduce(vcat, preset.numeric_wo_target; init=Transformation[]) do name
+function pp(df, preset; normalizer=MinMaxNormalize)
+	t1 = mapreduce(vcat, preset.numeric; init=Transformation[]) do name
 		col = df[!, name]
 		fm = FillMissing(name)
 		if skewness(col |> skipmissing |> collect) ≥ 0.7
-			[FillMissing(name), Log1p(name), ZNormal(name)]
+			[FillMissing(name), Log1p(name)]
 		else
-			[FillMissing(name), ZNormal(name)]
+			[FillMissing(name)]
 		end
 	end
 
-	t2 = mapreduce(vcat, preset.hierarchical |> collect; init=Transformation[]) do (n, v)
-		[HierarchyCoding(n, v), ZNormal(n)]
+	t2 = map(preset.hierarchical |> collect) do (n, v)
+		HierarchyCoding(n, v)
 	end
 
-	t3 = mapreduce(vcat, preset.categorical; init=Transformation[]) do n
+	t3 = map(preset.categorical) do n
 		vals = unique(df[!, n])
-		f = Categorize(n, vals)
-		new_columns = target_columns(f)
-		zs = map(ZNormal, new_columns)
-		[f; zs]
+		Categorize(n, vals)
 	end
 
-	t4 = let t =  Log1p[]
-		col = df[!, preset.target]
-		while skewness(col) ≥ 0.7 && length(t) ≤ 2
-			push!(t, Log1p(preset.target))
-			col = log1p.(col)
-		end
+	t = t1 ∪ t2 ∪ t3
+
+	if isnothing(normalizer)
 		t
+	else
+		df2 = derive(df, t)
+		t4 = map(target_columns(t)) do n
+			col = df2[!, n]
+			normalizer(n, col)
+		end
+		t ∪ t4
 	end
-
-	t1 ∪ t2 ∪ t3 ∪ t4
 end
 
 
