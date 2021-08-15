@@ -36,7 +36,6 @@ function derive(df, f::HierarchyCoding)
 	function g(x)
 		y = indexin(x, f.items)
 		y = replace(y, nothing => 0)
-		safe_znormal(y)
 	end
 	transform(df, f.column => g => f.column)
 end
@@ -57,10 +56,6 @@ function derive(df, f::Categorize)
 		f.column => ByRow(isequal(item)) => name
 	end
 	df = select(transform(df, t...), Not(f.column))
-	t = map(new_columns) do name
-		name => safe_znormal => name
-	end
-	transform(df, t...)
 end
 
 
@@ -69,17 +64,13 @@ function derive(df, f::Log1p)
 end
 
 
-function derive(df, fs_::Vector{Transformation})
-	fs = let names = names(df)
-		filter(x -> x.column in names, fs_)
-	end
-	let nfs = setdiff(fs_, fs)
-		if !isempty(nfs)
-			@warn nfs
-		end
-	end
+function derive(df, fs::Vector{Transformation})
 	for f in fs
-		df = derive(df, f)
+		# Do not filter first, because 
+		# categorical create new columns
+		if f.column in names(df)
+			df = derive(df, f)
+		end
 	end
 	return df
 end
@@ -133,7 +124,7 @@ end
 
 
 function pp(df, preset)
-	t1 = mapreduce(vcat, preset.numeric_wo_target) do name
+	t1 = mapreduce(vcat, preset.numeric_wo_target; init=Transformation[]) do name
 		col = df[!, name]
 		fm = FillMissing(name)
 		if skewness(col |> skipmissing |> collect) ≥ 0.7
@@ -143,13 +134,16 @@ function pp(df, preset)
 		end
 	end
 
-	t2 = map(preset.hierarchical |> collect) do (n, v)
-		HierarchyCoding(n, v)
+	t2 = mapreduce(vcat, preset.hierarchical |> collect; init=Transformation[]) do (n, v)
+		[HierarchyCoding(n, v), ZNormal(n)]
 	end
 
-	t3 = map(preset.categorical) do n
+	t3 = mapreduce(vcat, preset.categorical; init=Transformation[]) do n
 		vals = unique(df[!, n])
-		Categorize(n, vals)
+		f = Categorize(n, vals)
+		new_columns = target_columns(f)
+		zs = map(ZNormal, new_columns)
+		[f; zs]
 	end
 
 	t4 = let t =  Log1p[]
