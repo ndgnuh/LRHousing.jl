@@ -2,6 +2,8 @@
 # for the sake of comfy-ness
 using Gadfly
 using Gadfly.Compose
+using Cairo
+using Fontconfig
 
 const DEF_WIDTH=Compose.default_graphic_width
 const DEF_HEIGHT=Compose.default_graphic_height
@@ -33,17 +35,22 @@ function qqplot(X; transpose=false, w=DEF_WIDTH, h=DEF_WIDTH)
 end
 
 
-function coefplot(df; bar_height = 0.75cm, intercept=false)
+function coefplot(df; bar_height = 0.5cm, intercept=false, sortabs=false)
 	codf = @chain begin
 		df
-		filter(r ->  !(r["Lower 95%"] ≤ 0 ≤ r["Upper 95%"]), _)
+		filter(r ->  !(r["Lower 95%"] ≤ r.t ≤ r["Upper 95%"]), _)
+		filter(r -> r["Coef."] ≉ 0, _)
 		if intercept
 			_
 		else
 			filter(r->r["Name"] != "(Intercept)", _)
 		end
-		transform(_, "Coef." => ByRow(abs) => "AbsCoef")
-		sort(_, "AbsCoef", rev=false)
+		if sortabs
+			transform(_, "Coef." => ByRow(abs) => "AbsCoef")
+			sort(_, "AbsCoef", rev=false)
+		else
+			sort(_, "Coef.", rev=false)
+		end
 	end
 	set_default_plot_size(DEF_WIDTH, bar_height * size(codf, 1))
 	theme = Theme(bar_highlight=colorant"teal", default_color="teal")

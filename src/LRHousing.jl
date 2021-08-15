@@ -1,6 +1,7 @@
 module LRHousing
 
 using Chain: @chain
+using Random
 using StatsBase
 using StatsBase.Statistics
 using DataFrames
@@ -46,16 +47,20 @@ function fill_missing(df::AbstractDataFrame, numeric=detect_numeric(df))
 end
 
 
-function formula(columns, target)
+function formula(columns, target; noconst=true)
 	lhs = Term(Symbol(target))
 	columns = filter(!isequal(target |> String), String.(columns))
 	rhs = @. Term(Symbol(columns))
-	f = FormulaTerm(lhs, (ConstantTerm(1), rhs...))
+	if noconst
+		FormulaTerm(lhs, (rhs...,))
+	else
+		FormulaTerm(lhs, (ConstantTerm(1), rhs...))
+	end
 end
 
 
-function fit(data, columns, target)
-	formula(columns, target)
+function fit(data, columns, target; noconst=true)
+	f = formula(columns, target; noconst=noconst)
 	lm(f, data)
 end
 
@@ -74,19 +79,23 @@ function rmse(pred, y; normalize=true)
 end
 
 
-function kfold_rmse(data, preset, k = 10; normalize=true)
+function kfold_rmse(data, preset, k = 10; normalize=true, logging=false)
 	n = size(data, 1)
-	idx = collect(Iterators.partition(1:n, n÷k))
+	idx = collect(Iterators.partition(randperm(n), n÷(k-1)))
 	tf = pp(data, preset)
 	columns = target_columns(tf)
 	f = formula(columns, preset.target)    
 
-	R = map(enumerate(idx)) do (k, idx)
-		train = derive(data[Not(idx), :], tf)
-		test = derive(data[idx, :], tf)
+	R = map(enumerate(idx)) do (k, I)
+		train = derive(data[Not(I), :], tf)
+		test = derive(data[I, :], tf)
 		model = lm(f, train)
 		pred = predict(model, test)
-		rmse(pred, test[!, preset.target]; normalize=normalize)
+		r = rmse(pred, test[!, preset.target]; normalize=normalize)
+		if logging
+			@show (k, r)
+		end
+		r
 	end
 	mean(R)
 end
