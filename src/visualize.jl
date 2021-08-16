@@ -23,7 +23,7 @@ function qqplot(X; transpose=false, w=DEF_WIDTH, h=DEF_WIDTH)
 		default_color="ivory"
 	)
 	xlabel = "𝐪"
-	ylabel = "𝐱"
+	ylabel = "𝐫"
 	
 	if transpose
 		sx, q = q, sx
@@ -35,25 +35,74 @@ function qqplot(X; transpose=false, w=DEF_WIDTH, h=DEF_WIDTH)
 end
 
 
-function coefplot(df; bar_height = 0.5cm, intercept=false, sortabs=false)
+function coefplot(df; bar_height = 0.5cm, intercept=false, sortabs=false, filter=true, limit=nothing)
+	abs_col = :AbsCoef
+	coef_col = "Coef."
 	codf = @chain begin
 		df
-		filter(r ->  !(r["Lower 95%"] ≤ r.t ≤ r["Upper 95%"]), _)
-		filter(r -> r["Coef."] ≉ 0, _)
+		# Remove 95% 
+		if filter
+			Base.filter(r ->  !(r["Lower 95%"] ≤ r.t ≤ r["Upper 95%"]), _)
+			Base.filter(r -> r["Coef."] ≉ 0, _)
+		else
+			_
+		end
+		# Remove intercept term
 		if intercept
 			_
 		else
-			filter(r->r["Name"] != "(Intercept)", _)
+			Base.filter(r->r["Name"] != "(Intercept)", _)
+		end
+		# abs value of coef column
+		transform(_, coef_col => ByRow(abs) => abs_col)
+		# take from top
+		if isnothing(limit)
+			_
+		else
+			df = sort(_, coef_col, rev=true)
+			k = limit÷2
+			[first(df, k); last(df, k)]
 		end
 		if sortabs
-			transform(_, "Coef." => ByRow(abs) => "AbsCoef")
-			sort(_, "AbsCoef", rev=false)
+			sort(_, abs_col, rev=false)
 		else
-			sort(_, "Coef.", rev=false)
+			sort(_, coef_col, rev=false)
 		end
 	end
 	set_default_plot_size(DEF_WIDTH, bar_height * size(codf, 1))
 	theme = Theme(bar_highlight=colorant"teal", default_color="teal")
 	geo = Geom.bar(orientation=:horizontal)
-	p = plot(codf, x="Coef.", y="Name", geo, theme)
+	p = plot(codf, x="Coef.", y="Name", Guide.xlabel("Value"), Guide.ylabel("Coef"), geo, theme)
+end
+
+
+function plot_pred_eps(pred, e; transpose=false, w=DEF_WIDTH, h=DEF_WIDTH)
+	set_default_plot_size(w, h)
+
+	theme = Theme(
+		discrete_highlight_color=x -> "teal",
+		default_color="ivory"
+	)
+	xlabel = "𝐲"
+	ylabel = "𝛜"
+	x, y = pred, e
+	
+	if transpose
+		x, y = y, x
+		xlabel, ylabel = ylabel, xlabel
+	end
+	points = layer(x=x, y=y, Geom.point, theme)
+	plot(points, Guide.xlabel(xlabel), Guide.ylabel(ylabel))
+end
+
+
+function plot_eps_hist(e; w=DEF_WIDTH, h=DEF_HEIGHT)
+
+	set_default_plot_size(w, h)
+
+	theme = Theme(
+		discrete_highlight_color=x -> "teal",
+		default_color="teal"
+	)
+	plot(x=e, y=e, Guide.xlabel("𝐫"), Guide.ylabel(""), Geom.histogram, theme)
 end

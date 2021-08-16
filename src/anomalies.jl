@@ -65,7 +65,8 @@ $(join(map(x -> "- `$(x)`", InteractiveUtils.subtypes(AnomaliesMethod)), "\n"))
 function lower_upper(X, method::IQRMethod)
 	lower = quantile(X, method.lower)
 	upper = quantile(X, method.upper)
-	lower, upper
+	iqr = 1.5*(upper - lower)
+	lower - iqr, upper + iqr
 end
 
 
@@ -85,3 +86,11 @@ function lower_upper(X, method::MedianAbsoluteDeviation)
 	upper = m + method.k * mad
 	lower, upper
 end
+
+
+#= function find_anomalies(df, columns, method::AnomaliesMethod) =#
+#= 	idx = mapreduce(vcat, columns) do name =#
+#= 		find_anomalies(df[!, name], method) =#
+#= 	end =#
+#= 	unique(idx) =#
+#= end =#

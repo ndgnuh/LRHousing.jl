@@ -39,7 +39,6 @@ const AMES_MANUAL = let
 		   "MiscVal"
 		   "MasVnrArea"
 		   "TotalBsmtSF"
-		   "MSSubClass"
 		   "YearBuilt"
 		   "YearRemodAdd"
 		   "GarageYrBlt"
@@ -47,7 +46,7 @@ const AMES_MANUAL = let
 		   "YrSold"
 		   ]
 
-	categorical = [
+	categorical = ["MSSubClass"
 		       "MSZoning"
 		       "RoofStyle"
 		       "RoofMatl"
