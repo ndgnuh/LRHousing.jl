@@ -7,6 +7,7 @@ using StatsBase.Statistics
 using DataFrames
 using CSV
 using GLM
+include("shapirowilk.jl")
 include("preset.jl")
 include("visualize.jl")
 include("anomalies.jl")
