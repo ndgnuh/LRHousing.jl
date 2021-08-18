@@ -7,6 +7,7 @@ using StatsBase.Statistics
 using DataFrames
 using CSV
 using GLM
+include("cor.jl")
 include("shapirowilk.jl")
 include("preset.jl")
 include("visualize.jl")
@@ -102,6 +103,28 @@ function kfold_rmse(data, preset, k = 10; normalize=true, logging=false)
 end
 
 
+function kfold_rmse(train_function, data, target, k=10; normalize=true, logging=false)
+	n = size(data, 1)
+	idx = collect(Iterators.partition(randperm(n), n÷(k-1)))
+	RMSE = map(enumerate(idx)) do (k, I)
+		train = data[Not(I), :]
+		test = data[I, :]
+		model = train_function(train)
+		pred = predict(model, test)
+		r = rmse(pred, test[!, target]; normalize=normalize)
+		if logging
+			@show (k, r)
+		end
+		r
+	end
+	mean(RMSE)
+end
+
+
+function rsquared(model, df::AbstractDataFrame)
+	y = predict(model, df)
+	rsquared(model, y)
+end
 function rsquared(model, y)
 	my = mean(y)
 	stot = sum(@. (y - my)^2)

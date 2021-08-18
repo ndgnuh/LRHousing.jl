@@ -43,6 +43,15 @@ end
 struct Categorize <: Transformation
 	column
 	items
+	leftout
+	function Categorize(column, X)
+		items = unique(X)
+		cm = countmap(items)
+		_, idx = findmin(item -> cm[item], items)
+		leftout = items[idx]
+		items = setdiff(items, [leftout])
+		new(column, items, leftout)
+	end
 end
 
 
@@ -154,11 +163,11 @@ function inv_derive(df, fs::Vector{Transformation})
 end
 
 
-function pp(df, preset; normalizer=MinMaxNormalize)
+function pp(df, preset; normalizer=MinMaxNormalize, log_x=true, normalize_target=true)
 	t1 = mapreduce(vcat, preset.numeric; init=Transformation[]) do name
 		col = df[!, name]
 		fm = FillMissing(name)
-		if skewness(col |> skipmissing |> collect) ≥ 0.7
+		if log_x && skewness(col |> skipmissing |> collect) ≥ 0.7
 			[FillMissing(name), Log1p(name)]
 		else
 			[FillMissing(name)]
@@ -170,8 +179,7 @@ function pp(df, preset; normalizer=MinMaxNormalize)
 	end
 
 	t3 = map(preset.categorical) do n
-		vals = unique(df[!, n])
-		Categorize(n, vals)
+		Categorize(n, df[!, n])
 	end
 
 	t = t1 ∪ t2 ∪ t3
@@ -180,9 +188,12 @@ function pp(df, preset; normalizer=MinMaxNormalize)
 		t
 	else
 		df2 = derive(df, t)
-		t4 = map(target_columns(t)) do n
+		t4 = mapreduce(vcat, target_columns(t); init=normalizer[]) do n
+			if n == preset.target && !normalize_target
+				return normalizer[]
+			end
 			col = df2[!, n]
-			normalizer(n, col)
+			[normalizer(n, col)]
 		end
 		t ∪ t4
 	end
@@ -192,3 +203,7 @@ end
 target_columns(f::Transformation) = [f.column]
 target_columns(f::Categorize) = [f.column * "_" * string(item) for item in f.items]
 target_columns(fs::Vector{Transformation}) = unique(reduce(vcat, target_columns.(fs)))
+
+ignored_columns(f::Transformation) = String[]
+ignored_columns(f::Categorize) = ["$(f.column)_$(f.leftout)"]
+ignored_columns(fs::Vector{Transformation}) = unique(mapreduce(ignored_columns, vcat, fs))

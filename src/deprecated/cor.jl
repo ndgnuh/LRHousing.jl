@@ -51,7 +51,7 @@ function compute_cordf(df)
 end
 
 
-function find_multicolinearity(cordf, ycol; threshold=0.8)
+function find_multicolinearity(cordf, ycol; threshold=0.7)
 	to_be_removed = String[]
 	sizehint!(to_be_removed, size(cordf, 1)÷3)
 	considers = setdiff(cordf.col, ["SalePrice"])
@@ -63,8 +63,8 @@ function find_multicolinearity(cordf, ycol; threshold=0.8)
 		end
 		row_ind = findfirst(n1 .== name_index)
 		col_ind = findfirst(n2 .== name_index)
-		if abs(df[row_ind, col_ind]) ≥ threshold
-			append!(to_be_removed, [df[row_ind, ycol] > df[col_ind, ycol] ? n2 : n1])
+		if abs(df[row_ind, col_ind]) > threshold
+			append!(to_be_removed, [abs(df[row_ind, ycol]) > abs(df[col_ind, ycol]) ? n2 : n1])
 		end
 	end
 	to_be_removed

@@ -4,6 +4,7 @@ using Gadfly
 using Gadfly.Compose
 using Cairo
 using Fontconfig
+using Distributions
 
 const DEF_WIDTH=Compose.default_graphic_width
 const DEF_HEIGHT=Compose.default_graphic_height
@@ -35,14 +36,17 @@ function qqplot(X; transpose=false, w=DEF_WIDTH, h=DEF_WIDTH)
 end
 
 
-function coefplot(df; bar_height = 0.5cm, intercept=false, sortabs=false, filter=true, limit=nothing)
+function coefplot(model; w=DEF_WIDTH, bar_height = 0.5cm, intercept=false, sortabs=false, filter=true, limit=nothing, alpha=0.05)
 	abs_col = :AbsCoef
 	coef_col = "Coef."
+	df = DataFrame(coeftable(model))
+	n = size(modelmatrix(model), 1)
+	t = cquantile(TDist(n-2), alpha/2)
 	codf = @chain begin
 		df
 		# Remove 95% 
 		if filter
-			Base.filter(r ->  !(r["Lower 95%"] ≤ r.t ≤ r["Upper 95%"]), _)
+			Base.filter(r ->  !(-t ≤ r.t ≤ t), _)
 			Base.filter(r -> r["Coef."] ≉ 0, _)
 		else
 			_
@@ -69,7 +73,7 @@ function coefplot(df; bar_height = 0.5cm, intercept=false, sortabs=false, filter
 			sort(_, coef_col, rev=false)
 		end
 	end
-	set_default_plot_size(DEF_WIDTH, bar_height * size(codf, 1))
+	set_default_plot_size(w, bar_height * size(codf, 1))
 	theme = Theme(bar_highlight=colorant"teal", default_color="teal")
 	geo = Geom.bar(orientation=:horizontal)
 	p = plot(codf, x="Coef.", y="Name", Guide.xlabel("Value"), Guide.ylabel("Coef"), geo, theme)
